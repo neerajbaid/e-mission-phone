@@ -18,6 +18,7 @@
 #import "AuthCompletionHandler.h"
 #import "Constants.h"
 #import "ConnectionSettings.h"
+#import "RNCachingURLProtocol.h"
 // #import "MovesAPI.h"
 
 @interface AppDelegate () {
@@ -48,6 +49,7 @@ static NSString * const runMultipleTimes = @"appHasRunMoreThanOnce";
         splitViewController.delegate = (id)navigationController.topViewController;
     }
     [[UIApplication sharedApplication] setMinimumBackgroundFetchInterval:BACKGROUND_SYNC_TIME];
+    [NSURLProtocol registerClass:[RNCachingURLProtocol class]];
     _tripSectionDb = [[TripSectionDatabase alloc] init];
     _statsDb = [[ClientStatsDatabase alloc] init];
     // Handle google+ sign on
