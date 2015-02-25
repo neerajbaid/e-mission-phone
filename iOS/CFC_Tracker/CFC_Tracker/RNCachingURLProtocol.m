@@ -79,9 +79,8 @@ static NSSet *RNCachingSupportedSchemes;
 
 + (BOOL)canInitWithRequest:(NSURLRequest *)request
 {
-    //    [request.URL.relativePath isEqualToString:@"/compare"]
-    // only handle http requests we haven't marked with our header.
-    if ([[self supportedSchemes] containsObject:[[request URL] scheme]] &&
+    if (([[self supportedSchemes] containsObject:[[request URL] scheme]] ||
+         [request.URL.relativePath isEqualToString:@"/compare"]) &&
         ([request valueForHTTPHeaderField:RNCachingURLHeader] == nil))
     {
         return YES;
