@@ -49,16 +49,12 @@
 
 - (void)postToHost {
     NSLog(@"postToHost called with url = %@", self.mUrl);
+    NSString *userToken = [AuthCompletionHandler sharedInstance].getIdToken;
     NSMutableURLRequest *request = [[NSMutableURLRequest alloc]
                                     initWithURL:self.mUrl];
-    [request setHTTPMethod:@"POST"];
-    [request setValue:@"application/json"
-   forHTTPHeaderField:@"Content-Type"];
-    
-    NSString *userToken = [AuthCompletionHandler sharedInstance].getIdToken;
-    // At this point, we assume that all the authentication is done correctly
-    // Should I try to verify making a remote call or add that to a debug screen?
-    [self.mJsonDict setObject:userToken forKey:@"user"];
+    [request setHTTPMethod:@"GET"];
+    [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    [request setValue:userToken forHTTPHeaderField:@"Authentication"];
     
     NSError *parseError;
     NSData *jsonData = [NSJSONSerialization dataWithJSONObject:self.mJsonDict
