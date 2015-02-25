@@ -71,8 +71,6 @@ static NSSet *RNCachingSupportedSchemes;
         dispatch_once(&onceToken, ^{
             RNCachingSupportedSchemesMonitor = [NSObject new];
         });
-        
-        //      [self setSupportedSchemes:[NSSet setWithObjects:@"http", @"https", nil]];
         [self setSupportedSchemes:[NSSet setWithObjects:@"http", nil]];
     }
 }
