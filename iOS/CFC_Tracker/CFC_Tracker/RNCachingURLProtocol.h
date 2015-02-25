@@ -58,6 +58,8 @@
 // For more details see
 //    [Drop-in offline caching for UIWebView (and NSURLProtocol)](http://robnapier.net/blog/offline-uiwebview-nsurlprotocol-588).
 
+#define EMSLastRefreshedCompareCache @"EMSLastRefreshedCompareCache"
+
 #import <Foundation/Foundation.h>
 
 @interface RNCachingURLProtocol : NSURLProtocol

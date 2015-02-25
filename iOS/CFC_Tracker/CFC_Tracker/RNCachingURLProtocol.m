@@ -65,181 +65,180 @@ static NSSet *RNCachingSupportedSchemes;
 
 + (void)initialize
 {
-  if (self == [RNCachingURLProtocol class])
-  {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-      RNCachingSupportedSchemesMonitor = [NSObject new];
-    });
-      
-      [self setSupportedSchemes:[NSSet setWithObjects:@"http", @"https", nil]];
-  }
+    if (self == [RNCachingURLProtocol class])
+    {
+        static dispatch_once_t onceToken;
+        dispatch_once(&onceToken, ^{
+            RNCachingSupportedSchemesMonitor = [NSObject new];
+        });
+        
+        //      [self setSupportedSchemes:[NSSet setWithObjects:@"http", @"https", nil]];
+        [self setSupportedSchemes:[NSSet setWithObjects:@"http", nil]];
+    }
 }
 
 + (BOOL)canInitWithRequest:(NSURLRequest *)request
 {
-  // only handle http requests we haven't marked with our header.
-  if ([[self supportedSchemes] containsObject:[[request URL] scheme]] &&
-      ([request valueForHTTPHeaderField:RNCachingURLHeader] == nil))
-  {
-    return YES;
-  }
-  return NO;
+    //    [request.URL.relativePath isEqualToString:@"/compare"]
+    // only handle http requests we haven't marked with our header.
+    if ([[self supportedSchemes] containsObject:[[request URL] scheme]] &&
+        ([request valueForHTTPHeaderField:RNCachingURLHeader] == nil))
+    {
+        return YES;
+    }
+    return NO;
 }
 
 + (NSURLRequest *)canonicalRequestForRequest:(NSURLRequest *)request
 {
-  return request;
+    return request;
 }
 
 - (NSString *)cachePathForRequest:(NSURLRequest *)aRequest
 {
-  // This stores in the Caches directory, which can be deleted when space is low, but we only use it for offline access
-  NSString *cachesPath = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) lastObject];
-  NSString *fileName = [[[aRequest URL] absoluteString] sha1];
-
-  return [cachesPath stringByAppendingPathComponent:fileName];
+    // This stores in the Caches directory, which can be deleted when space is low, but we only use it for offline access
+    NSString *cachesPath = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) lastObject];
+    NSString *fileName = [[[aRequest URL] absoluteString] sha1];
+    
+    return [cachesPath stringByAppendingPathComponent:fileName];
 }
 
 - (void)startLoading
 {
-  if (![self useCache]) {
-    NSMutableURLRequest *connectionRequest = 
-#if WORKAROUND_MUTABLE_COPY_LEAK
-      [[self request] mutableCopyWorkaround];
-#else
-      [[self request] mutableCopy];
-#endif
-    // we need to mark this request with our header so we know not to handle it in +[NSURLProtocol canInitWithRequest:].
-    [connectionRequest setValue:@"" forHTTPHeaderField:RNCachingURLHeader];
-    NSURLConnection *connection = [NSURLConnection connectionWithRequest:connectionRequest
-                                                                delegate:self];
-    [self setConnection:connection];
-  }
-  else {
     RNCachedData *cache = [NSKeyedUnarchiver unarchiveObjectWithFile:[self cachePathForRequest:[self request]]];
-    if (cache) {
-      NSData *data = [cache data];
-      NSURLResponse *response = [cache response];
-      NSURLRequest *redirectRequest = [cache redirectRequest];
-      if (redirectRequest) {
-        [[self client] URLProtocol:self wasRedirectedToRequest:redirectRequest redirectResponse:response];
-      } else {
-          
-        [[self client] URLProtocol:self didReceiveResponse:response cacheStoragePolicy:NSURLCacheStorageNotAllowed]; // we handle caching ourselves.
-        [[self client] URLProtocol:self didLoadData:data];
-        [[self client] URLProtocolDidFinishLoading:self];
-      }
+    if ([cache data] && [self useCache]) {
+        NSData *data = [cache data];
+        NSURLResponse *response = [cache response];
+        NSURLRequest *redirectRequest = [cache redirectRequest];
+        if (redirectRequest) {
+            [[self client] URLProtocol:self wasRedirectedToRequest:redirectRequest redirectResponse:response];
+        } else {
+            
+            [[self client] URLProtocol:self didReceiveResponse:response cacheStoragePolicy:NSURLCacheStorageNotAllowed]; // we handle caching ourselves.
+            [[self client] URLProtocol:self didLoadData:data];
+            [[self client] URLProtocolDidFinishLoading:self];
+        }
+    } else {
+        if ([self.request.URL.relativePath isEqualToString:@"/compare"]) {
+            [[NSUserDefaults standardUserDefaults] setObject:[NSDate date] forKey:EMSLastRefreshedCompareCache];
+        }
+        NSMutableURLRequest *connectionRequest =
+#if WORKAROUND_MUTABLE_COPY_LEAK
+        [[self request] mutableCopyWorkaround];
+#else
+        [[self request] mutableCopy];
+#endif
+        // we need to mark this request with our header so we know not to handle it in +[NSURLProtocol canInitWithRequest:].
+        [connectionRequest setValue:@"" forHTTPHeaderField:RNCachingURLHeader];
+        NSURLConnection *connection = [NSURLConnection connectionWithRequest:connectionRequest
+                                                                    delegate:self];
+        [self setConnection:connection];
     }
-    else {
-      [[self client] URLProtocol:self didFailWithError:[NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorCannotConnectToHost userInfo:nil]];
-    }
-  }
 }
 
 - (void)stopLoading
 {
-  [[self connection] cancel];
+    [[self connection] cancel];
 }
 
 // NSURLConnection delegates (generally we pass these on to our client)
 
 - (NSURLRequest *)connection:(NSURLConnection *)connection willSendRequest:(NSURLRequest *)request redirectResponse:(NSURLResponse *)response
 {
-// Thanks to Nick Dowell https://gist.github.com/1885821
-  if (response != nil) {
-      NSMutableURLRequest *redirectableRequest =
+    // Thanks to Nick Dowell https://gist.github.com/1885821
+    if (response != nil) {
+        NSMutableURLRequest *redirectableRequest =
 #if WORKAROUND_MUTABLE_COPY_LEAK
-      [request mutableCopyWorkaround];
+        [request mutableCopyWorkaround];
 #else
-      [request mutableCopy];
+        [request mutableCopy];
 #endif
-    // We need to remove our header so we know to handle this request and cache it.
-    // There are 3 requests in flight: the outside request, which we handled, the internal request,
-    // which we marked with our header, and the redirectableRequest, which we're modifying here.
-    // The redirectable request will cause a new outside request from the NSURLProtocolClient, which 
-    // must not be marked with our header.
-    [redirectableRequest setValue:nil forHTTPHeaderField:RNCachingURLHeader];
-
-    NSString *cachePath = [self cachePathForRequest:[self request]];
-    RNCachedData *cache = [RNCachedData new];
-    [cache setResponse:response];
-    [cache setData:[self data]];
-    [cache setRedirectRequest:redirectableRequest];
-    [NSKeyedArchiver archiveRootObject:cache toFile:cachePath];
-    [[self client] URLProtocol:self wasRedirectedToRequest:redirectableRequest redirectResponse:response];
-    return redirectableRequest;
-  } else {
-    return request;
-  }
+        // We need to remove our header so we know to handle this request and cache it.
+        // There are 3 requests in flight: the outside request, which we handled, the internal request,
+        // which we marked with our header, and the redirectableRequest, which we're modifying here.
+        // The redirectable request will cause a new outside request from the NSURLProtocolClient, which
+        // must not be marked with our header.
+        [redirectableRequest setValue:nil forHTTPHeaderField:RNCachingURLHeader];
+        
+        NSString *cachePath = [self cachePathForRequest:[self request]];
+        RNCachedData *cache = [RNCachedData new];
+        [cache setResponse:response];
+        [cache setData:[self data]];
+        [cache setRedirectRequest:redirectableRequest];
+        [NSKeyedArchiver archiveRootObject:cache toFile:cachePath];
+        [[self client] URLProtocol:self wasRedirectedToRequest:redirectableRequest redirectResponse:response];
+        return redirectableRequest;
+    } else {
+        return request;
+    }
 }
 
 - (void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)data
 {
-  [[self client] URLProtocol:self didLoadData:data];
-  [self appendData:data];
+    [[self client] URLProtocol:self didLoadData:data];
+    [self appendData:data];
 }
 
 - (void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error
 {
-  [[self client] URLProtocol:self didFailWithError:error];
-  [self setConnection:nil];
-  [self setData:nil];
-  [self setResponse:nil];
+    [[self client] URLProtocol:self didFailWithError:error];
+    [self setConnection:nil];
+    [self setData:nil];
+    [self setResponse:nil];
 }
 
 - (void)connection:(NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)response
 {
-  [self setResponse:response];
-  [[self client] URLProtocol:self didReceiveResponse:response cacheStoragePolicy:NSURLCacheStorageNotAllowed];  // We cache ourselves.
+    [self setResponse:response];
+    [[self client] URLProtocol:self didReceiveResponse:response cacheStoragePolicy:NSURLCacheStorageNotAllowed];  // We cache ourselves.
 }
 
 - (void)connectionDidFinishLoading:(NSURLConnection *)connection
 {
-  [[self client] URLProtocolDidFinishLoading:self];
-
-  NSString *cachePath = [self cachePathForRequest:[self request]];
-  RNCachedData *cache = [RNCachedData new];
-  [cache setResponse:[self response]];
-  [cache setData:[self data]];
-  [NSKeyedArchiver archiveRootObject:cache toFile:cachePath];
-
-  [self setConnection:nil];
-  [self setData:nil];
-  [self setResponse:nil];
+    [[self client] URLProtocolDidFinishLoading:self];
+    
+    NSString *cachePath = [self cachePathForRequest:[self request]];
+    RNCachedData *cache = [RNCachedData new];
+    [cache setResponse:[self response]];
+    [cache setData:[self data]];
+    [NSKeyedArchiver archiveRootObject:cache toFile:cachePath];
+    
+    [self setConnection:nil];
+    [self setData:nil];
+    [self setResponse:nil];
 }
 
-- (BOOL) useCache 
+- (BOOL) useCache
 {
-    BOOL reachable = (BOOL) [[Reachability reachabilityWithHostName:[[[self request] URL] host]] currentReachabilityStatus] != NotReachable;
-    return !reachable;
+    NSDate *lastRefreshedDate = [[NSUserDefaults standardUserDefaults] objectForKey:EMSLastRefreshedCompareCache];
+    return [lastRefreshedDate timeIntervalSinceNow] < 10800 && lastRefreshedDate; // 3 hours
 }
 
 - (void)appendData:(NSData *)newData
 {
-  if ([self data] == nil) {
-    [self setData:[newData mutableCopy]];
-  }
-  else {
-    [[self data] appendData:newData];
-  }
+    if ([self data] == nil) {
+        [self setData:[newData mutableCopy]];
+    }
+    else {
+        [[self data] appendData:newData];
+    }
 }
 
 + (NSSet *)supportedSchemes {
-  NSSet *supportedSchemes;
-  @synchronized(RNCachingSupportedSchemesMonitor)
-  {
-    supportedSchemes = RNCachingSupportedSchemes;
-  }
-  return supportedSchemes;
+    NSSet *supportedSchemes;
+    @synchronized(RNCachingSupportedSchemesMonitor)
+    {
+        supportedSchemes = RNCachingSupportedSchemes;
+    }
+    return supportedSchemes;
 }
 
 + (void)setSupportedSchemes:(NSSet *)supportedSchemes
 {
-  @synchronized(RNCachingSupportedSchemesMonitor)
-  {
-    RNCachingSupportedSchemes = supportedSchemes;
-  }
+    @synchronized(RNCachingSupportedSchemesMonitor)
+    {
+        RNCachingSupportedSchemes = supportedSchemes;
+    }
 }
 
 @end
@@ -255,21 +254,21 @@ static NSString *const kRedirectRequestKey = @"redirectRequest";
 
 - (void)encodeWithCoder:(NSCoder *)aCoder
 {
-  [aCoder encodeObject:[self data] forKey:kDataKey];
-  [aCoder encodeObject:[self response] forKey:kResponseKey];
-  [aCoder encodeObject:[self redirectRequest] forKey:kRedirectRequestKey];
+    [aCoder encodeObject:[self data] forKey:kDataKey];
+    [aCoder encodeObject:[self response] forKey:kResponseKey];
+    [aCoder encodeObject:[self redirectRequest] forKey:kRedirectRequestKey];
 }
 
 - (id)initWithCoder:(NSCoder *)aDecoder
 {
-  self = [super init];
-  if (self != nil) {
-    [self setData:[aDecoder decodeObjectForKey:kDataKey]];
-    [self setResponse:[aDecoder decodeObjectForKey:kResponseKey]];
-    [self setRedirectRequest:[aDecoder decodeObjectForKey:kRedirectRequestKey]];
-  }
-
-  return self;
+    self = [super init];
+    if (self != nil) {
+        [self setData:[aDecoder decodeObjectForKey:kDataKey]];
+        [self setResponse:[aDecoder decodeObjectForKey:kResponseKey]];
+        [self setRedirectRequest:[aDecoder decodeObjectForKey:kRedirectRequestKey]];
+    }
+    
+    return self;
 }
 
 @end
