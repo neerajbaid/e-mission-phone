@@ -54,7 +54,7 @@
                                     initWithURL:self.mUrl];
     [request setHTTPMethod:@"GET"];
     [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-    [request setValue:userToken forHTTPHeaderField:@"Authorization"];
+    [request setValue:userToken forHTTPHeaderField:@"user"];
     
     NSError *parseError;
     NSData *jsonData = [NSJSONSerialization dataWithJSONObject:self.mJsonDict
