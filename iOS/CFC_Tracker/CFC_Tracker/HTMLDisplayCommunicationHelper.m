@@ -53,20 +53,10 @@
     NSMutableURLRequest *request = [[NSMutableURLRequest alloc]
                                     initWithURL:self.mUrl];
     [request setHTTPMethod:@"GET"];
-    [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
     [request setValue:userToken forHTTPHeaderField:@"user"];
     
-    NSError *parseError;
-    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:self.mJsonDict
-                                                       options:kNilOptions
-                                                         error:&parseError];
-    if (parseError) {
-        self.mCompletionHandler(jsonData, nil, parseError);
-    } else {
-        [request setHTTPBody:jsonData];
-        [self.webView loadRequest:request];
-        self.mCompletionHandler(jsonData, nil, nil);
-    }
+    [self.webView loadRequest:request];
+    self.mCompletionHandler(nil, nil, nil);
 }
 
 @end
